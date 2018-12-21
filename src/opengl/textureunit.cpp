@@ -29,21 +29,24 @@
 
 namespace ghoul::opengl {
 
+std::function<void*()> TextureUnit::_currentContext = []() { return nullptr; };
+
+std::unordered_map<void*, TextureUnit::Context> TextureUnit::_contexts;
+
+void TextureUnit::setCurrentContextFunction(std::function<void*()> f) {
+    _currentContext = std::move(f);
+}
+
 TextureUnit::TextureUnitError::TextureUnitError(std::string msg)
     : RuntimeError(std::move(msg), "TextureUnit")
 {}
-
-bool TextureUnit::_isInitialized = false;
-unsigned int TextureUnit::_totalActive = 0;
-unsigned int TextureUnit::_maxTexUnits = 0;
-std::vector<bool> TextureUnit::_busyUnits = std::vector<bool>();
 
 TextureUnit::TextureUnit()
     : _number(0)
     , _glEnum(GLenum(0))
     , _assigned(false)
 {
-    if (!_isInitialized) {
+    if (_contexts.find(_currentContext()) == _contexts.end()) {
         initialize();
     }
 }
@@ -60,10 +63,11 @@ void TextureUnit::activate() {
 }
 
 void TextureUnit::deactivate() {
+    Context& c = _contexts[_currentContext()];
     if (_assigned) {
         _assigned = false;
-        _busyUnits.at(_number) = false;
-        --_totalActive;
+        c.busyUnits.at(_number) = false;
+        --c.totalActive;
     }
 }
 
@@ -90,36 +94,39 @@ void TextureUnit::setZeroUnit() {
 }
 
 int TextureUnit::numberActiveUnits() {
-    return _totalActive;
+    Context& c = _contexts[_currentContext()];
+    return c.totalActive;
 }
 
 void TextureUnit::assignUnit() {
-    if (_totalActive >= _maxTexUnits) {
+    Context& c = _contexts[_currentContext()];
+
+    if (c.totalActive >= c.maxTexUnits) {
         throw TextureUnitError("No more texture units available");
     }
 
     _assigned = true;
 
-    for (size_t i = 0; i < _maxTexUnits; ++i) {
-        if (!_busyUnits[i]) {
+    for (size_t i = 0; i < c.maxTexUnits; ++i) {
+        if (!c.busyUnits[i]) {
             _number = static_cast<GLint>(i);
             _glEnum = GL_TEXTURE0 + _number;
-            _busyUnits[i] = true;
-            ++_totalActive;
+            c.busyUnits[i] = true;
+            ++c.totalActive;
             break;
         }
     }
 }
 
 void TextureUnit::initialize() {
+    Context& c = _contexts[_currentContext()];
     if (systemcapabilities::SystemCapabilities::isInitialized()) {
-        _maxTexUnits = OpenGLCap.maxTextureUnits();
+        c.maxTexUnits = OpenGLCap.maxTextureUnits();
     }
     else {
-        _maxTexUnits = 8; // Reasonable default setting for OpenGL
+        c.maxTexUnits = 8; // Reasonable default setting for OpenGL
     }
-    _busyUnits = std::vector<bool>(_maxTexUnits, false);
-    _isInitialized = true;
+    c.busyUnits = std::vector<bool>(c.maxTexUnits, false);
 }
 
 } // namespace ghoul::opengl

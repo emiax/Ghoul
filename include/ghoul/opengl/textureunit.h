@@ -30,6 +30,7 @@
 #include <ghoul/opengl/ghoul_gl.h>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 namespace ghoul::opengl {
 
@@ -125,7 +126,26 @@ public:
      */
     static int numberActiveUnits();
 
+    /**
+     * Sets the function to call to retrive the current context.
+     */
+    static void setCurrentContextFunction(std::function<void*()> f);
+
 private:
+    struct Context {
+        /// The total number of active texture unit
+        unsigned int totalActive = 0;
+
+        /// The maximum number of texture units
+        unsigned int maxTexUnits = 0;
+
+        /**
+         * This vector stores a bool at position <code>i</code> if the texture unit number
+         * <code>i</code> is currently in use
+         */
+        std::vector<bool> busyUnits;
+    };
+
     /**
      * This method is called the first time either #activate, #glEnum, or #unitNumber is
      * called. It will assign a new OpenGL texture unit to this TextureUnit and mark this
@@ -154,21 +174,9 @@ private:
     /// <code>true</code> if this TextureUnit has been assigned
     bool _assigned;
 
-    /// <code>true</code> if the list of busy units and the maximum number of units have
-    /// been initialized
-    static bool _isInitialized;
+    static std::function<void*()> _currentContext;
 
-    /// The total number of active texture unit
-    static unsigned int _totalActive;
-
-    /// The maximum number of texture units
-    static unsigned int _maxTexUnits;
-
-    /**
-     * This vector stores a bool at position <code>i</code> if the texture unit number
-     * <code>i</code> is currently in use
-     */
-    static std::vector<bool> _busyUnits;
+    static std::unordered_map<void*, Context> _contexts;
 };
 
 } // namespace ghoul::opengl
